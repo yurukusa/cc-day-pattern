@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cc-day-pattern — Claude Code Usage Visualizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --accent:    #3fb950;
+      --accent-dim:#1f6b30;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --weekend-bg:#1a1f2e;
+      --peak-glow: rgba(63, 185, 80, 0.18);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 3rem;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    header h1 span { color: var(--accent); }
+    header p {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-top: 0.35rem;
+    }
+
+    /* ── Card ────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 720px;
+      padding: 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── Input area ──────────────────────────── */
+    .input-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    textarea {
+      width: 100%;
+      height: 130px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.78rem;
+      padding: 0.75rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea.drag-over { border-color: var(--accent); background: #111810; }
+
+    .btn-row {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.45rem 1rem;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    button:hover { opacity: 0.88; }
+    .btn-primary {
+      background: var(--accent);
+      color: #0d1117;
+    }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+    .btn-twitter {
+      background: #1d9bf0;
+      color: #fff;
+      margin-left: auto;
+    }
+
+    .error-msg {
+      color: #f85149;
+      font-size: 0.8rem;
+      margin-top: 0.5rem;
+      display: none;
+    }
+
+    /* ── Viz card ────────────────────────────── */
+    #viz { display: none; }
+
+    /* ── Toggle ──────────────────────────────── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .toggle-label { font-size: 0.8rem; color: var(--muted); }
+    .toggle {
+      position: relative;
+      display: inline-flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .toggle input[type="radio"] { display: none; }
+    .toggle label {
+      padding: 0.3rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .toggle input[type="radio"]:checked + label {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    /* ── Summary stats ───────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stat.pattern .stat-value {
+      font-size: 0.95rem;
+    }
+
+    /* ── Bar chart ───────────────────────────── */
+    .chart-wrap {
+      position: relative;
+    }
+
+    /* Weekday / Weekend background bands */
+    .chart-bands {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      pointer-events: none;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .band {
+      flex: 1;
+    }
+    .band.weekend { background: var(--weekend-bg); }
+    .band.weekday { background: transparent; }
+
+    /* Band label */
+    .band-labels {
+      display: flex;
+      margin-bottom: 0.3rem;
+    }
+    .band-label {
+      font-size: 0.68rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+    .band-label.wknd { flex: 2; } /* Sun + Sat occupy 2/7 ~ 28.6% */
+    .band-label.wkdy { flex: 5; text-align: center; }
+    .band-label.wknd2 { flex: 1; text-align: right; }
+
+    .bars-container {
+      display: flex;
+      align-items: flex-end;
+      height: 220px;
+      gap: 6px;
+      padding: 0 2px;
+    }
+
+    .bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      position: relative;
+    }
+
+    .bar-value {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 4px;
+      min-height: 1em;
+      text-align: center;
+    }
+
+    .bar {
+      width: 100%;
+      max-width: 52px;
+      border-radius: 4px 4px 0 0;
+      background: #1e3a24;
+      transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s;
+      min-height: 2px;
+      position: relative;
+    }
+    .bar.filled { background: #2d6a3a; }
+    .bar.peak {
+      background: var(--accent);
+      box-shadow: 0 0 16px var(--peak-glow);
+    }
+
+    .peak-label {
+      position: absolute;
+      top: -1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.62rem;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+
+    .bar-day {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 6px;
+      font-weight: 500;
+    }
+    .bar-col.peak-col .bar-day { color: var(--accent); font-weight: 700; }
+
+    /* Divider between Sun and Mon (start of weekday) */
+    .divider-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border);
+      opacity: 0.5;
+    }
+
+    /* ── Share row ───────────────────────────── */
+    .share-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+      flex-wrap: wrap;
+    }
+    .share-row .hint {
+      font-size: 0.75rem;
+      color: var(--muted);
+      flex: 1;
+    }
+
+    /* ── Footer ──────────────────────────────── */
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 1rem;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    footer code {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      font-size: 0.85em;
+    }
+
+    /* ── Responsive ──────────────────────────── */
+    @media (max-width: 500px) {
+      .bars-container { height: 170px; gap: 3px; }
+      .bar-day { font-size: 0.62rem; }
+      .bar-value { font-size: 0.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1><span>cc-day-pattern</span> visualizer</h1>
+  <p>Paste JSON from <code style="background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:0.1em 0.4em;font-size:0.85em">npx cc-day-pattern --json</code> to see your usage pattern</p>
+</header>
+
+<!-- Input card -->
+<div class="card">
+  <label class="input-label">Paste JSON output — or drag &amp; drop a .json file</label>
+  <textarea id="jsonInput" placeholder='{"version":"1.0.0","summary":{...},"byDayOfWeek":[...]}'></textarea>
+  <div class="btn-row">
+    <button class="btn-primary" id="btnVisualize">Visualize</button>
+    <button class="btn-ghost" id="btnDemo">Load demo data</button>
+  </div>
+  <div class="error-msg" id="errorMsg"></div>
+</div>
+
+<!-- Visualization card -->
+<div class="card" id="viz">
+  <!-- Toggle: hours / sessions -->
+  <div class="toggle-row">
+    <span class="toggle-label">Show by</span>
+    <div class="toggle">
+      <input type="radio" name="metric" id="metricHours" value="hours" checked>
+      <label for="metricHours">Hours</label>
+      <input type="radio" name="metric" id="metricSessions" value="sessions">
+      <label for="metricSessions">Sessions</label>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-row" id="statsRow"></div>
+
+  <!-- Bar chart -->
+  <div class="chart-wrap">
+    <div class="band-labels">
+      <span class="band-label wknd">WEEKEND</span>
+      <span class="band-label wkdy">WEEKDAY</span>
+      <span class="band-label wknd2">WKND</span>
+    </div>
+    <div class="chart-bands" id="chartBands"></div>
+    <div class="bars-container" id="barsContainer"></div>
+  </div>
+
+  <!-- Share -->
+  <div class="share-row">
+    <span class="hint">Share your coding pattern</span>
+    <button class="btn-twitter" id="btnTwitter">Share on X / Twitter</button>
+  </div>
+</div>
+
+<footer>
+  One of 36 free tools at <a href="https://yurukusa.github.io/cc-toolkit/" target="_blank">yurukusa.github.io/cc-toolkit/</a> &nbsp;|&nbsp; <code>npx cc-day-pattern</code>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Demo data ───────────────────────────────────────────────── */
+  const DEMO = {
+    version: "1.0.0",
+    generatedAt: "2026-03-01T03:23:04.605Z",
+    timeRange: "all time",
+    summary: {
+      totalSessions: 84,
+      totalHours: 23.2,
+      peakDay: "Thursday",
+      weekdaySessions: 59,
+      weekendSessions: 25,
+      weekdayHours: 21.5,
+      weekendHours: 1.7
+    },
+    byDayOfWeek: [
+      { day: "Sunday",    sessions: 10, hours: 0.7, avgHours: 0.1 },
+      { day: "Monday",    sessions: 0,  hours: 0,   avgHours: 0   },
+      { day: "Tuesday",   sessions: 7,  hours: 0.2, avgHours: 0   },
+      { day: "Wednesday", sessions: 4,  hours: 0,   avgHours: 0   },
+      { day: "Thursday",  sessions: 28, hours: 11.2, avgHours: 0.4 },
+      { day: "Friday",    sessions: 20, hours: 10.1, avgHours: 0.5 },
+      { day: "Saturday",  sessions: 15, hours: 1,   avgHours: 0.1 }
+    ]
+  };
+
+  /* ── Pattern logic ───────────────────────────────────────────── */
+  function calcPattern(summary) {
+    const total = summary.weekdaySessions + summary.weekendSessions;
+    if (total === 0) return "Always on";
+    const wdPct = summary.weekdaySessions / total;
+    const wePct = summary.weekendSessions / total;
+    if (wdPct >= 0.80) return "Weekday grinder";
+    if (wdPct >= 0.60) return "Mostly weekdays";
+    if (wePct >= 0.60) return "Weekend hacker";
+    return "Always on";
+  }
+
+  /* ── Render ──────────────────────────────────────────────────── */
+  let currentData = null;
+  let currentMetric = 'hours';
+
+  function fmtVal(day, metric) {
+    const v = day[metric];
+    if (v === 0) return '';
+    if (metric === 'hours') return v % 1 === 0 ? v + 'h' : v.toFixed(1) + 'h';
+    return String(v);
+  }
+
+  function renderStats(data) {
+    const s = data.summary;
+    const pattern = calcPattern(s);
+    const statsRow = document.getElementById('statsRow');
+    statsRow.innerHTML = `
+      <div class="stat">
+        <div class="stat-value">${s.totalSessions}</div>
+        <div class="stat-label">Sessions</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">${s.totalHours.toFixed(1)}h</div>
+        <div class="stat-label">Total Hours</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">${s.peakDay.slice(0, 3)}</div>
+        <div class="stat-label">Peak Day</div>
+      </div>
+      <div class="stat pattern">
+        <div class="stat-value">${pattern}</div>
+        <div class="stat-label">Pattern</div>
+      </div>
+    `;
+    return pattern;
+  }
+
+  function renderBars(data, metric) {
+    const days = data.byDayOfWeek;
+    const values = days.map(d => d[metric]);
+    const maxVal = Math.max(...values, 0.001);
+    const peakDay = data.summary.peakDay;
+    const container = document.getElementById('barsContainer');
+
+    // Weekend background bands: Sun=index0, Sat=index6
+    const bands = document.getElementById('chartBands');
+    bands.innerHTML = '';
+    // We'll use 7 equal flex children
+    days.forEach((d, i) => {
+      const band = document.createElement('div');
+      band.className = 'band ' + (i === 0 || i === 6 ? 'weekend' : 'weekday');
+      bands.appendChild(band);
+    });
+
+    container.innerHTML = '';
+    days.forEach((d, i) => {
+      const isPeak = d.day === peakDay;
+      const heightPct = maxVal > 0 ? (d[metric] / maxVal) * 100 : 0;
+      const col = document.createElement('div');
+      col.className = 'bar-col' + (isPeak ? ' peak-col' : '');
+
+      const valLabel = document.createElement('div');
+      valLabel.className = 'bar-value';
+      valLabel.textContent = fmtVal(d, metric);
+
+      const bar = document.createElement('div');
+      bar.className = 'bar' + (d[metric] > 0 ? ' filled' : '') + (isPeak ? ' peak' : '');
+      bar.style.height = Math.max(heightPct, d[metric] > 0 ? 2 : 0) + '%';
+
+      if (isPeak && d[metric] > 0) {
+        const pk = document.createElement('div');
+        pk.className = 'peak-label';
+        pk.textContent = '← PEAK';
+        bar.appendChild(pk);
+      }
+
+      const dayLabel = document.createElement('div');
+      dayLabel.className = 'bar-day';
+      dayLabel.textContent = d.day.slice(0, 3).toUpperCase();
+
+      col.appendChild(valLabel);
+      col.appendChild(bar);
+      col.appendChild(dayLabel);
+      container.appendChild(col);
+    });
+  }
+
+  function render(data, metric) {
+    currentData = data;
+    currentMetric = metric;
+    document.getElementById('viz').style.display = 'block';
+    const pattern = renderStats(data);
+    renderBars(data, metric);
+
+    // Store pattern for share button
+    document.getElementById('btnTwitter').dataset.pattern = pattern;
+    document.getElementById('btnTwitter').dataset.peak = data.summary.peakDay;
+  }
+
+  /* ── Parse ───────────────────────────────────────────────────── */
+  function tryParse(raw) {
+    const data = JSON.parse(raw.trim());
+    if (!data.summary || !Array.isArray(data.byDayOfWeek)) {
+      throw new Error('Missing required fields: summary or byDayOfWeek');
+    }
+    return data;
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+  function clearError() {
+    const el = document.getElementById('errorMsg');
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  /* ── Button handlers ─────────────────────────────────────────── */
+  document.getElementById('btnVisualize').addEventListener('click', () => {
+    clearError();
+    const raw = document.getElementById('jsonInput').value.trim();
+    if (!raw) { showError('Paste JSON output first.'); return; }
+    try {
+      const data = tryParse(raw);
+      render(data, currentMetric);
+    } catch (e) {
+      showError('Invalid JSON: ' + e.message);
+    }
+  });
+
+  document.getElementById('btnDemo').addEventListener('click', () => {
+    clearError();
+    document.getElementById('jsonInput').value = JSON.stringify(DEMO, null, 2);
+    render(DEMO, currentMetric);
+  });
+
+  /* ── Metric toggle ───────────────────────────────────────────── */
+  document.querySelectorAll('input[name="metric"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (currentData) {
+        currentMetric = radio.value;
+        renderBars(currentData, currentMetric);
+      }
+    });
+  });
+
+  /* ── Drag & drop ─────────────────────────────────────────────── */
+  const ta = document.getElementById('jsonInput');
+  ta.addEventListener('dragover', e => { e.preventDefault(); ta.classList.add('drag-over'); });
+  ta.addEventListener('dragleave', () => ta.classList.remove('drag-over'));
+  ta.addEventListener('drop', e => {
+    e.preventDefault();
+    ta.classList.remove('drag-over');
+    clearError();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      const raw = evt.target.result;
+      ta.value = raw;
+      try {
+        const data = tryParse(raw);
+        render(data, currentMetric);
+      } catch (err) {
+        showError('Could not parse file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  /* ── Twitter / X share ───────────────────────────────────────── */
+  document.getElementById('btnTwitter').addEventListener('click', () => {
+    const btn = document.getElementById('btnTwitter');
+    const peak = btn.dataset.peak || 'Unknown';
+    const pattern = btn.dataset.pattern || 'Always on';
+    const text = `My #ClaudeCode peak day is ${peak} — ${pattern} (powered by cc-day-pattern) https://yurukusa.github.io/cc-day-pattern/ #cc-toolkit`;
+    const url = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  });
+
+  /* ── Live parse on textarea input (auto-render if valid JSON) ── */
+  let autoTimer;
+  document.getElementById('jsonInput').addEventListener('input', () => {
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => {
+      const raw = document.getElementById('jsonInput').value.trim();
+      if (!raw) return;
+      try {
+        const data = tryParse(raw);
+        clearError();
+        render(data, currentMetric);
+      } catch (_) {
+        // Silently ignore until user clicks Visualize
+      }
+    }, 600);
+  });
+})();
+</script>
+
+</body>
+</html>
