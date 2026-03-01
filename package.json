@@ -1,0 +1,25 @@
+{
+  "name": "cc-day-pattern",
+  "version": "1.0.0",
+  "description": "What day of the week do you actually code with Claude Code? Weekday heatmap: sessions, hours, and avg session length per day.",
+  "type": "module",
+  "bin": {
+    "cc-day-pattern": "cli.mjs"
+  },
+  "keywords": [
+    "claude-code",
+    "ai",
+    "productivity",
+    "weekday-pattern",
+    "developer-tools"
+  ],
+  "author": "yurukusa",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yurukusa/cc-day-pattern"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
